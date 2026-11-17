@@ -1,0 +1,29 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test
+        run: mvn -B clean verify
+      - name: Smoke test the shaded jar (SQLite native library, migrations, CLI)
+        shell: bash
+        run: |
+          export DEVFORGE_HOME="$RUNNER_TEMP/devforge-smoke"
+          JAR=$(ls target/devforge-*.jar | grep -v original | head -n1)
+          java -jar "$JAR" --version
+          java -jar "$JAR" status --json
+          mkdir -p "$RUNNER_TEMP/smoke-project" && cd "$RUNNER_TEMP/smoke-project" && echo "hello smoke" > a.txt
+          java -jar "$GITHUB_WORKSPACE/$JAR" init .
+          java -jar "$GITHUB_WORKSPACE/$JAR" search index .
+          java -jar "$GITHUB_WORKSPACE/$JAR" search smoke
