@@ -105,6 +105,11 @@ public final class RestoreEngine {
      * @param overwriteConflicts if false, CONFLICT entries are left untouched and counted
      */
     public static Result execute(Plan plan, boolean overwriteConflicts, Instant now) {
+        return execute(plan, overwriteConflicts, now, null);
+    }
+
+    /** Executes a restore from a legacy ZIP or an authenticated encrypted archive. */
+    public static Result execute(Plan plan, boolean overwriteConflicts, Instant now, char[] passphrase) {
         Path recoveryDir = plan.targetHome().resolve(RECOVERY_DIR).resolve(STAMP.format(now));
         int restored = 0;
         int identical = 0;
@@ -112,7 +117,8 @@ public final class RestoreEngine {
         int recovered = 0;
         List<String> failures = new ArrayList<>();
 
-        try (ZipFile zf = new ZipFile(plan.archive().toFile())) {
+        try (EncryptedArchive.Opened opened = EncryptedArchive.open(plan.archive(), passphrase)) {
+            ZipFile zf = opened.zip();
             for (PlanEntry pe : plan.entries()) {
                 String label = pe.entry().path();
                 switch (pe.action()) {

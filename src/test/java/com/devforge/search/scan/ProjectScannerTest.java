@@ -61,6 +61,23 @@ class ProjectScannerTest {
     }
 
     @Test
+    void appliesNestedGitignoresAndReincludesFilesInsideIgnoredDirectories() throws IOException {
+        write("nested/.gitignore", "*.tmp\n");
+        write("nested/hidden.tmp", "x");
+        write("nested/visible.txt", "x");
+        write("generated/keep.txt", "x");
+        write("generated/drop.txt", "x");
+        Files.writeString(root.resolve(".gitignore"), "*.log\nbuild-output/\ngenerated/\n!generated/keep.txt\n!keep.log\n");
+
+        ScanResult result = ProjectScanner.scan(root, IgnoreRules.forProject(root, List.of()));
+
+        assertTrue(paths(result).contains("nested/visible.txt"));
+        assertFalse(paths(result).contains("nested/hidden.tmp"));
+        assertTrue(paths(result).contains("generated/keep.txt"));
+        assertFalse(paths(result).contains("generated/drop.txt"));
+    }
+
+    @Test
     void recordsSizeExtensionAndModifiedTime() throws IOException {
         ScanResult r = ProjectScanner.scan(root, IgnoreRules.empty());
         ScannedFile main = r.files().stream().filter(f -> f.relativePath().equals("src/Main.java")).findFirst().orElseThrow();

@@ -6,4 +6,4 @@ import java.time.Instant;
 public record BackupRecord(
         long id, Long profileId, String profileName, String name, String archivePath, String manifestPath,
         String checksum, Instant createdAt, boolean verified, Instant verifiedAt, long sizeBytes, int fileCount,
-        String appVersion, boolean includesSensitive) {}
+        String appVersion, boolean includesSensitive, boolean encrypted) {}

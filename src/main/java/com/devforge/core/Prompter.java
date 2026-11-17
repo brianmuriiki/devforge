@@ -9,14 +9,25 @@ public interface Prompter {
 
     Optional<String> ask(String prompt);
 
+    /** Reads a secret without echoing it where the platform provides an interactive console. */
+    default Optional<char[]> askSecret(String prompt) {
+        return ask(prompt).map(String::toCharArray);
+    }
+
     /** Uses the process console; empty when there is none (output or input redirected, CI). */
     static Prompter system() {
-        return prompt -> {
-            Console console = System.console();
-            if (console == null) {
-                return Optional.empty();
+        return new Prompter() {
+            @Override
+            public Optional<String> ask(String prompt) {
+                Console console = System.console();
+                return console == null ? Optional.empty() : Optional.ofNullable(console.readLine("%s", prompt));
             }
-            return Optional.ofNullable(console.readLine("%s", prompt));
+
+            @Override
+            public Optional<char[]> askSecret(String prompt) {
+                Console console = System.console();
+                return console == null ? Optional.empty() : Optional.ofNullable(console.readPassword("%s", prompt));
+            }
         };
     }
 

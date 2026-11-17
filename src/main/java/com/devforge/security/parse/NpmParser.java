@@ -17,8 +17,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Reads direct dependencies from {@code package.json}. Resolved versions come from a sibling
- * {@code package-lock.json} (lockfile v1, v2 or v3) or from exact version pins. Never runs npm.
+ * Reads direct dependencies from {@code package.json} plus every resolved package in a sibling
+ * {@code package-lock.json} (lockfile v1, v2 or v3). Never runs npm.
  */
 public final class NpmParser {
 
@@ -33,7 +33,7 @@ public final class NpmParser {
         if (root == null || !root.isObject()) {
             throw new ManifestException(packageJson.getFileName() + " is not a JSON object.");
         }
-        Map<String, String> locked = lockedVersions(packageJson.resolveSibling("package-lock.json"));
+        LockedPackages locked = lockedPackages(packageJson.resolveSibling("package-lock.json"));
 
         List<Dependency> result = new ArrayList<>();
         Set<String> seen = new HashSet<>();
@@ -49,55 +49,95 @@ public final class NpmParser {
                 if (!seen.add(name)) {
                     continue;
                 }
-                String resolved = locked.get(name);
+                String resolved = locked.directVersions().get(name);
                 if (resolved == null && EXACT.matcher(spec).matches()) {
                     resolved = spec.startsWith("v") ? spec.substring(1) : spec;
                 }
                 result.add(new Dependency(name, spec, resolved, Ecosystem.NPM, true, section));
             }
         }
+        Set<String> included = new HashSet<>();
+        for (Dependency dependency : result) {
+            if (dependency.resolvedVersion() != null) {
+                included.add(dependency.name() + "\u0000" + dependency.resolvedVersion());
+            }
+        }
+        for (LockedPackage dependency : locked.all()) {
+            String key = dependency.name() + "\u0000" + dependency.version();
+            if (included.add(key)) {
+                result.add(new Dependency(dependency.name(), dependency.version(), dependency.version(), Ecosystem.NPM,
+                        false, "transitive"));
+            }
+        }
         return result;
     }
 
-    private static Map<String, String> lockedVersions(Path lockFile) {
-        Map<String, String> versions = new HashMap<>();
+    private record LockedPackage(String name, String version, boolean topLevel) {}
+
+    private record LockedPackages(Map<String, String> directVersions, List<LockedPackage> all) {}
+
+    private static LockedPackages lockedPackages(Path lockFile) {
+        Map<String, String> directVersions = new HashMap<>();
+        List<LockedPackage> packages = new ArrayList<>();
         JsonNode root;
         try {
             if (!Files.isRegularFile(lockFile)) {
-                return versions;
+                return new LockedPackages(directVersions, packages);
             }
             root = readJson(lockFile);
         } catch (ManifestException e) {
-            return versions; // an unreadable lockfile just means versions stay unresolved
+            return new LockedPackages(directVersions, packages); // unreadable lockfile means versions stay unresolved
         }
         if (root == null) {
-            return versions;
+            return new LockedPackages(directVersions, packages);
         }
-        JsonNode packages = root.get("packages");
-        if (packages != null && packages.isObject()) {
-            String prefix = "node_modules/";
-            for (Iterator<Map.Entry<String, JsonNode>> it = packages.fields(); it.hasNext(); ) {
+        JsonNode packageEntries = root.get("packages");
+        if (packageEntries != null && packageEntries.isObject()) {
+            for (Iterator<Map.Entry<String, JsonNode>> it = packageEntries.fields(); it.hasNext(); ) {
                 Map.Entry<String, JsonNode> entry = it.next();
                 String key = entry.getKey();
-                if (key.startsWith(prefix) && key.indexOf(prefix, prefix.length()) < 0) {
-                    JsonNode version = entry.getValue().get("version");
-                    if (version != null && version.isTextual()) {
-                        versions.put(key.substring(prefix.length()), version.asText());
+                String name = packageName(key);
+                JsonNode version = entry.getValue().get("version");
+                if (name != null && version != null && version.isTextual() && EXACT.matcher(version.asText()).matches()) {
+                    boolean topLevel = key.equals("node_modules/" + name);
+                    packages.add(new LockedPackage(name, version.asText(), topLevel));
+                    if (topLevel) {
+                        directVersions.put(name, version.asText());
                     }
                 }
             }
+        } else {
+            collectLegacy(root.get("dependencies"), packages, directVersions, true);
         }
-        JsonNode legacy = root.get("dependencies");
-        if (legacy != null && legacy.isObject()) {
-            for (Iterator<Map.Entry<String, JsonNode>> it = legacy.fields(); it.hasNext(); ) {
-                Map.Entry<String, JsonNode> entry = it.next();
-                JsonNode version = entry.getValue().get("version");
-                if (version != null && version.isTextual()) {
-                    versions.putIfAbsent(entry.getKey(), version.asText());
+        return new LockedPackages(Map.copyOf(directVersions), List.copyOf(packages));
+    }
+
+    private static void collectLegacy(
+            JsonNode entries, List<LockedPackage> packages, Map<String, String> directVersions, boolean topLevel) {
+        if (entries == null || !entries.isObject()) {
+            return;
+        }
+        for (Iterator<Map.Entry<String, JsonNode>> it = entries.fields(); it.hasNext(); ) {
+            Map.Entry<String, JsonNode> entry = it.next();
+            JsonNode value = entry.getValue();
+            JsonNode version = value.get("version");
+            if (version != null && version.isTextual() && EXACT.matcher(version.asText()).matches()) {
+                packages.add(new LockedPackage(entry.getKey(), version.asText(), topLevel));
+                if (topLevel) {
+                    directVersions.put(entry.getKey(), version.asText());
                 }
             }
+            collectLegacy(value.get("dependencies"), packages, directVersions, false);
         }
-        return versions;
+    }
+
+    private static String packageName(String packagePath) {
+        int index = packagePath.lastIndexOf("node_modules/");
+        if (index < 0) {
+            return null;
+        }
+        String name = packagePath.substring(index + "node_modules/".length());
+        return name.isEmpty() || name.contains("/node_modules/") ? null : name;
     }
 
     private static JsonNode readJson(Path file) throws ManifestException {

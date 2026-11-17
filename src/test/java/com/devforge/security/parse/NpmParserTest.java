@@ -36,7 +36,7 @@ class NpmParserTest {
                     "node_modules/express/node_modules/nested": { "version": "0.0.1" } } }""");
 
         List<Dependency> deps = NpmParser.parse(tmp.resolve("package.json"));
-        assertEquals(6, deps.size());
+        assertEquals(7, deps.size());
         assertEquals("4.18.2", byName(deps, "express").resolvedVersion());
         assertEquals("^4.18.0", byName(deps, "express").declaredVersion());
         assertEquals("4.17.21", byName(deps, "lodash").resolvedVersion()); // exact pin
@@ -45,6 +45,9 @@ class NpmParserTest {
         assertEquals("devDependencies", byName(deps, "jest").scope());
         assertNull(byName(deps, "local").resolvedVersion());
         assertNull(byName(deps, "nolock").resolvedVersion());
+        Dependency nested = byName(deps, "nested");
+        assertEquals("0.0.1", nested.resolvedVersion());
+        assertEquals("transitive", nested.scope());
     }
 
     @Test
@@ -53,6 +56,22 @@ class NpmParserTest {
         Files.writeString(tmp.resolve("package-lock.json"),
                 "{ \"lockfileVersion\": 1, \"dependencies\": { \"left-pad\": { \"version\": \"1.3.0\" } } }");
         assertEquals("1.3.0", NpmParser.parse(tmp.resolve("package.json")).get(0).resolvedVersion());
+    }
+
+    @Test
+    void includesNestedLegacyLockfileDependencies() throws IOException {
+        Files.writeString(tmp.resolve("package.json"), "{ \"dependencies\": { \"a\": \"^1.0.0\" } }");
+        Files.writeString(tmp.resolve("package-lock.json"), """
+                { "lockfileVersion": 1, "dependencies": {
+                  "a": { "version": "1.0.0", "dependencies": {
+                    "b": { "version": "2.0.0" }
+                  } }
+                } }""");
+        List<Dependency> dependencies = NpmParser.parse(tmp.resolve("package.json"));
+        assertEquals(2, dependencies.size());
+        assertEquals("1.0.0", byName(dependencies, "a").resolvedVersion());
+        assertEquals("2.0.0", byName(dependencies, "b").resolvedVersion());
+        assertEquals("transitive", byName(dependencies, "b").scope());
     }
 
     @Test

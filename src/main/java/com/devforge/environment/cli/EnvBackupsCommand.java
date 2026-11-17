@@ -52,9 +52,9 @@ public class EnvBackupsCommand implements Runnable {
             for (BackupRecord b : backups) {
                 rows.add(List.of(String.valueOf(b.id()), b.profileName() == null ? "(deleted)" : b.profileName(),
                         b.createdAt().toString(), String.valueOf(b.fileCount()), b.sizeBytes() + " B",
-                        b.verified() ? "yes" : "NO", b.archivePath()));
+                        b.encrypted() ? "yes" : "NO", b.verified() ? "yes" : "NO", b.archivePath()));
             }
-            out.print(TextTable.render(List.of("ID", "PROFILE", "CREATED", "FILES", "SIZE", "VERIFIED", "ARCHIVE"), rows));
+            out.print(TextTable.render(List.of("ID", "PROFILE", "CREATED", "FILES", "SIZE", "ENCRYPTED", "VERIFIED", "ARCHIVE"), rows));
         }
         out.flush();
     }

@@ -19,6 +19,7 @@ public final class VaultRepository {
     private static final String BACKUP_SELECT =
             "SELECT b.id, b.profile_id, p.name, b.name, b.archive_path, b.manifest_path, b.checksum, b.created_at, "
                     + "b.verified, b.verified_at, b.size_bytes, b.file_count, b.app_version, b.includes_sensitive "
+                    + ", b.encrypted "
                     + "FROM vault_backups b LEFT JOIN vault_profiles p ON p.id = b.profile_id";
 
     public long insertProfile(Connection c, String name, String description, String destination, Instant now)
@@ -81,12 +82,13 @@ public final class VaultRepository {
 
     public long insertBackup(
             Connection c, Long profileId, String name, String archivePath, String manifestPath, String checksum,
-            Instant createdAt, boolean verified, long sizeBytes, int fileCount, String appVersion, boolean includesSensitive)
+            Instant createdAt, boolean verified, long sizeBytes, int fileCount, String appVersion, boolean includesSensitive,
+            boolean encrypted)
             throws SQLException {
         try (PreparedStatement ps = c.prepareStatement(
                 "INSERT INTO vault_backups (profile_id, name, archive_path, manifest_path, checksum, created_at, "
-                        + "verified, verified_at, size_bytes, file_count, app_version, includes_sensitive) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
+                    + "verified, verified_at, size_bytes, file_count, app_version, includes_sensitive, encrypted) "
+                    + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
             if (profileId == null) {
                 ps.setNull(1, Types.INTEGER);
             } else {
@@ -103,6 +105,7 @@ public final class VaultRepository {
             ps.setInt(10, fileCount);
             ps.setString(11, appVersion);
             ps.setInt(12, includesSensitive ? 1 : 0);
+            ps.setInt(13, encrypted ? 1 : 0);
             ps.executeUpdate();
         }
         return lastId(c);
@@ -170,7 +173,7 @@ public final class VaultRepository {
         return new BackupRecord(rs.getLong(1), profile, rs.getString(3), rs.getString(4), rs.getString(5),
                 rs.getString(6), rs.getString(7), Instant.parse(rs.getString(8)), rs.getInt(9) == 1,
                 verifiedAt == null ? null : Instant.parse(verifiedAt), rs.getLong(11), rs.getInt(12), rs.getString(13),
-                rs.getInt(14) == 1);
+                rs.getInt(14) == 1, rs.getInt(15) == 1);
     }
 
     private static long lastId(Connection c) throws SQLException {

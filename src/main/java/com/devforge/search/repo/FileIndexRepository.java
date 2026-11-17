@@ -156,13 +156,43 @@ public final class FileIndexRepository {
         return rows(c, sql.toString(), params, true);
     }
 
+    /** Safe fallback for partial identifier search when token-based FTS has no sufficient results. */
+    public List<Row> searchContentSubstrings(
+            Connection c, List<String> terms, Long projectId, String extension, int limit) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+                "SELECT f.project_id, f.file_path, '' FROM file_contents JOIN file_index f ON f.id = file_contents.rowid WHERE 1 = 1");
+        List<Object> params = new ArrayList<>();
+        for (String term : terms) {
+            sql.append(" AND file_contents.content LIKE ? ESCAPE '\\'");
+            params.add(likePattern(term));
+        }
+        appendFilters(sql, params, projectId, extension);
+        sql.append(" ORDER BY f.file_path LIMIT ?");
+        params.add(limit);
+        return rows(c, sql.toString(), params, true);
+    }
+
     public List<Row> searchNames(Connection c, String text, Long projectId, String extension, int limit)
             throws SQLException {
-        String escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
         StringBuilder sql = new StringBuilder(
                 "SELECT f.project_id, f.file_path FROM file_index f WHERE f.file_path LIKE ? ESCAPE '\\'");
         List<Object> params = new ArrayList<>();
-        params.add("%" + escaped + "%");
+        params.add(likePattern(text));
+        appendFilters(sql, params, projectId, extension);
+        sql.append(" ORDER BY f.file_path LIMIT ?");
+        params.add(limit);
+        return rows(c, sql.toString(), params, false);
+    }
+
+    /** Matches every query term in a file path, enabling partial and camel-case filename search. */
+    public List<Row> searchNameSubstrings(
+            Connection c, List<String> terms, Long projectId, String extension, int limit) throws SQLException {
+        StringBuilder sql = new StringBuilder("SELECT f.project_id, f.file_path FROM file_index f WHERE 1 = 1");
+        List<Object> params = new ArrayList<>();
+        for (String term : terms) {
+            sql.append(" AND f.file_path LIKE ? ESCAPE '\\'");
+            params.add(likePattern(term));
+        }
         appendFilters(sql, params, projectId, extension);
         sql.append(" ORDER BY f.file_path LIMIT ?");
         params.add(limit);
@@ -200,6 +230,11 @@ public final class FileIndexRepository {
             sql.append(" AND f.extension = ?");
             params.add(extension);
         }
+    }
+
+    private static String likePattern(String text) {
+        String escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return "%" + escaped + "%";
     }
 
     private static List<Row> rows(Connection c, String sql, List<Object> params, boolean hasSnippet)

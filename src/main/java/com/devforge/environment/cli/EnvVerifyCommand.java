@@ -51,13 +51,19 @@ public class EnvVerifyCommand implements Runnable {
         VaultService service = VaultServices.create(context);
         String label;
         ArchiveVerifier.Report report;
-        if (archive != null) {
-            label = archive.toString();
-            report = service.verifyArchive(archive, checksum);
-        } else {
-            BackupRecord record = service.getBackup(id);
-            label = "backup " + record.id();
-            report = service.verify(record);
+        BackupRecord record = archive == null ? service.getBackup(id) : null;
+        Path source = archive == null ? Path.of(record.archivePath()) : archive;
+        char[] passphrase = VaultPassphrases.forArchive(context, source);
+        try {
+            if (archive != null) {
+                label = archive.toString();
+                report = service.verifyArchive(archive, checksum, passphrase);
+            } else {
+                label = "backup " + record.id();
+                report = service.verify(record, passphrase);
+            }
+        } finally {
+            VaultPassphrases.clear(passphrase);
         }
         PrintWriter out = spec.commandLine().getOut();
         if (output.json) {

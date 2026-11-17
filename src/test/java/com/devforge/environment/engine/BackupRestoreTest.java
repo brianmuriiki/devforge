@@ -59,6 +59,11 @@ class BackupRestoreTest {
         return BackupEngine.create(sel.files(), "dev", "0.1.0", NOW, dest, "dev-20261113-000000");
     }
 
+    private BackupResult encryptedBackup() {
+        var sel = FileSelector.select(home, List.of("~/.gitconfig", "~/.config/app", "~/.bashrc"), List.of(), false);
+        return BackupEngine.create(sel.files(), "dev", "0.1.0", NOW, dest, "encrypted", "correct horse battery staple".toCharArray());
+    }
+
     private static void writeZip(Path file, Map<String, byte[]> entries) throws IOException {
         try (OutputStream out = Files.newOutputStream(file); ZipOutputStream zip = new ZipOutputStream(out)) {
             for (Map.Entry<String, byte[]> e : entries.entrySet()) {
@@ -93,6 +98,21 @@ class BackupRestoreTest {
         assertTrue(v.ok(), String.valueOf(v.problems()));
         assertEquals(3, v.filesChecked());
         assertEquals(3, v.manifest().orElseThrow().entries().size());
+    }
+
+    @Test
+    void encryptedBackupHidesMetadataAndRoundTrips() throws IOException {
+        BackupResult r = encryptedBackup();
+        assertTrue(r.archive().getFileName().toString().endsWith(".zip.enc"));
+        assertFalse(Files.exists(dest.resolve("encrypted.manifest.json")));
+        assertTrue(ArchiveVerifier.verify(r.archive(), r.sha256(), "correct horse battery staple".toCharArray()).ok());
+        assertFalse(ArchiveVerifier.verify(r.archive(), r.sha256(), "wrong passphrase".toCharArray()).ok());
+
+        Path newHome = Files.createDirectories(tmp.resolve("encrypted-home"));
+        Plan plan = RestoreEngine.plan(r.archive(), newHome, r.manifest());
+        Result restored = RestoreEngine.execute(plan, false, NOW, "correct horse battery staple".toCharArray());
+        assertEquals(3, restored.restored());
+        assertEquals("export X=1", Files.readString(newHome.resolve(".bashrc")));
     }
 
     @Test

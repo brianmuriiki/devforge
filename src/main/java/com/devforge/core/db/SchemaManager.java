@@ -28,7 +28,8 @@ public final class SchemaManager {
             new Migration(2, "taskforge", "/db/migration/V2__taskforge.sql"),
             new Migration(3, "findx", "/db/migration/V3__findx.sql"),
             new Migration(4, "depguard", "/db/migration/V4__depguard.sql"),
-            new Migration(5, "devvault", "/db/migration/V5__devvault.sql"));
+            new Migration(5, "devvault", "/db/migration/V5__devvault.sql"),
+            new Migration(6, "encrypted_backups", "/db/migration/V6__encrypted_backups.sql"));
 
     private static final String CREATE_VERSION_TABLE =
             """

@@ -41,7 +41,7 @@ public class EnvBackupCommand implements Callable<Integer> {
     String profile;
 
     @Option(names = "--include-sensitive",
-            description = "Also back up files that look like secrets. The archive is NOT encrypted.")
+            description = "Also back up files that look like secrets. The encrypted archive still needs its passphrase to restore.")
     boolean includeSensitive;
 
     @Option(names = "--dry-run", description = "Show what would be backed up without writing anything.")
@@ -64,8 +64,7 @@ public class EnvBackupCommand implements Callable<Integer> {
         if (includeSensitive && !sel.sensitiveIncluded().isEmpty() && !dryRun) {
             Confirmation.require(context, confirm,
                     "WARNING: this backup will include " + sel.sensitiveIncluded().size()
-                            + " file(s) that look like secrets (keys, tokens, credentials). The archive is NOT encrypted: "
-                            + "anyone who can read it can use them. Continue?");
+                            + " file(s) that look like secrets (keys, tokens, credentials). Continue?");
         }
         int warnings = sel.missing().size() + (sel.symlinksSkipped() > 0 ? 1 : 0) + (sel.unreadable() > 0 ? 1 : 0);
 
@@ -88,7 +87,13 @@ public class EnvBackupCommand implements Callable<Integer> {
             return warnings > 0 ? 4 : 0;
         }
 
-        BackupOutcome outcome = service.backup(p, includeSensitive, sel);
+        char[] passphrase = VaultPassphrases.forNewBackup(context);
+        BackupOutcome outcome;
+        try {
+            outcome = service.backup(p, includeSensitive, sel, passphrase);
+        } finally {
+            VaultPassphrases.clear(passphrase);
+        }
         warnings += outcome.skippedUnreadable().size();
         if (output.json) {
             Map<String, Object> doc = JsonOutput.document();

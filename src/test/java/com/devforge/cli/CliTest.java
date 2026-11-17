@@ -139,7 +139,7 @@ class CliTest {
         Result r = run("status");
         assertEquals(0, r.code());
         assertTrue(r.out().startsWith("DevForge "));
-        assertTrue(r.out().contains("Schema version: 5"));
+        assertTrue(r.out().contains("Schema version: 6"));
         assertTrue(r.out().contains("Projects:       0"));
     }
 
@@ -149,7 +149,7 @@ class CliTest {
 
         JsonNode doc = parse(run("status", "--json").out());
         assertEquals(1, doc.get("schemaVersion").asInt());
-        assertEquals(5, doc.get("databaseSchemaVersion").asInt());
+        assertEquals(6, doc.get("databaseSchemaVersion").asInt());
         assertEquals(1, doc.get("projectCount").asInt());
         assertTrue(doc.get("foreignKeysEnabled").asBoolean());
     }

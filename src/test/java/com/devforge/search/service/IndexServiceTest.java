@@ -121,6 +121,17 @@ class IndexServiceTest {
     }
 
     @Test
+    void partialTermsFindCamelCaseIdentifiersAndFileNames() throws IOException {
+        write("src/UserService.java", "class UserService { String getUserName() { return \"dev\"; } }");
+        service.index(project);
+
+        assertTrue(service.search("user", null, null, 20).stream()
+                .anyMatch(hit -> hit.path().equals("src/UserService.java") && hit.matchType().equals("content")));
+        assertTrue(service.search("serv", null, null, 20).stream()
+                .anyMatch(hit -> hit.path().equals("src/UserService.java")));
+    }
+
+    @Test
     void extensionAndProjectFilters() throws IOException {
         service.index(project);
         assertEquals(1, service.search("pool", null, "md", 20).size());

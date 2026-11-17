@@ -60,6 +60,30 @@ class OsvNormalizerTest {
     }
 
     @Test
+    void scoresCvssV3WhenTheAdvisoryDoesNotProvideASeverityWord() throws IOException {
+        Advisory critical = normalize("""
+                { "id": "OSV-CVSS", "severity": [
+                  { "type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H" }
+                ] }""", "x").orElseThrow();
+        Advisory medium = normalize("""
+                { "id": "OSV-CVSS-2", "severity": [
+                  { "type": "CVSS_V3", "score": "CVSS:3.1/AV:L/AC:H/PR:H/UI:R/S:U/C:L/I:L/A:N" }
+                ] }""", "x").orElseThrow();
+
+        assertEquals(Severity.CRITICAL, critical.severity());
+        assertEquals(Severity.LOW, medium.severity());
+    }
+
+    @Test
+    void ignoresMalformedCvssVectors() throws IOException {
+        Advisory advisory = normalize("""
+                { "id": "OSV-BAD-CVSS", "severity": [
+                  { "type": "CVSS_V3", "score": "CVSS:3.1/AV:N/AC:BOGUS" }
+                ] }""", "x").orElseThrow();
+        assertEquals(Severity.UNKNOWN, advisory.severity());
+    }
+
+    @Test
     void recordsWithInvalidIdsAreRejected() throws IOException {
         assertTrue(normalize("{ \"id\": \"bad id with spaces\" }", "x").isEmpty());
         assertTrue(normalize("{ \"id\": \"\" }", "x").isEmpty());

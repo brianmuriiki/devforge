@@ -35,6 +35,11 @@ public final class ArchiveVerifier {
      *                       (per-file hashes from the manifest are always checked)
      */
     public static Report verify(Path archive, String expectedSha256) {
+        return verify(archive, expectedSha256, null);
+    }
+
+    /** Verifies a legacy ZIP or an authenticated encrypted archive. */
+    public static Report verify(Path archive, String expectedSha256, char[] passphrase) {
         List<String> problems = new ArrayList<>();
         if (!Files.isRegularFile(archive)) {
             return new Report(false, List.of("Archive not found: " + archive), 0, Optional.empty());
@@ -51,7 +56,8 @@ public final class ArchiveVerifier {
         }
         BackupManifest manifest = null;
         int checked = 0;
-        try (ZipFile zf = new ZipFile(archive.toFile())) {
+        try (EncryptedArchive.Opened opened = EncryptedArchive.open(archive, passphrase)) {
+            ZipFile zf = opened.zip();
             ZipEntry manifestEntry = zf.getEntry(BackupEngine.MANIFEST_ENTRY);
             if (manifestEntry == null) {
                 return new Report(false, List.of("The archive has no manifest.json."), 0, Optional.empty());
@@ -88,6 +94,8 @@ public final class ArchiveVerifier {
                     problems.add("Unexpected entry not listed in the manifest: " + name.replaceAll("[\\p{Cntrl}]", "?"));
                 }
             }
+        } catch (VaultException e) {
+            return new Report(false, List.of(e.getMessage()), 0, Optional.empty());
         } catch (ZipException e) {
             return new Report(false, List.of("The archive is damaged: " + e.getMessage()), 0, Optional.empty());
         } catch (IOException e) {

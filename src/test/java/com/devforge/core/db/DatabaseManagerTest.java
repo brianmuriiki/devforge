@@ -62,7 +62,7 @@ class DatabaseManagerTest {
         DatabaseManager manager = new DatabaseManager(pathsUnder(tmp.resolve("home")));
         DatabaseInfo info = manager.initialize();
 
-        assertEquals(5, info.schemaVersion()); // update when you add a migration
+        assertEquals(6, info.schemaVersion()); // update when you add a migration
         try (Connection c = manager.connectionProvider().open();
                 Statement st = c.createStatement();
                 ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM projects")) {

@@ -22,5 +22,4 @@
 - Status honesty: INCOMPLETE and UNAVAILABLE scans are never reported as clean and produce exit code 4.
 
 ## Known gaps
-Secret detection is name-based. Backups are not encrypted (planned: authenticated encryption via an established library,
-never a custom algorithm). See `known-limitations.md`.
+Secret detection is name-based. Passphrase recovery is intentionally impossible. See `known-limitations.md`.

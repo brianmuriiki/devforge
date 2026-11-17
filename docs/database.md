@@ -9,7 +9,7 @@ run in one `BEGIN IMMEDIATE` transaction; a failure rolls everything back. A dat
 Never edit an applied migration; add a new one and update the expected version in `DatabaseManagerTest` and `CliTest`.
 The statement splitter ends statements at lines ending in `;` (no triggers).
 
-## Schema (version 5)
+## Schema (version 6)
 
 | Migration | Tables |
 |---|---|
@@ -18,6 +18,7 @@ The statement splitter ends statements at lines ending in `;` (no triggers).
 | V3 FindX | `file_index` (unique project+path, extension, size, SHA-256, content_indexed), FTS5 `file_contents(file_path, content)` keyed by `file_index.id` as rowid |
 | V4 DepGuard | `dependency_scans`, `dependencies`, `vulnerabilities`, `advisory_cache`, `package_metadata_cache` |
 | V5 DevVault | `vault_profiles`, `vault_profile_paths`, `vault_backups` |
+| V6 encrypted backups | Records whether a DevVault archive uses authenticated encryption |
 
 Foreign keys: tasks, bugs, file_index, scans and profile paths `ON DELETE CASCADE` from their parent; `activity_logs.project_id`
 and `vault_backups.profile_id` use `SET NULL` (history survives). Removing a project never touches the filesystem.

@@ -13,6 +13,7 @@ import com.devforge.environment.engine.RestoreEngine.Plan;
 import com.devforge.environment.engine.RestoreEngine.PlanEntry;
 import com.devforge.environment.engine.RestoreEngine.Result;
 import com.devforge.environment.service.VaultService;
+import com.devforge.environment.model.BackupRecord;
 import java.io.PrintWriter;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -73,7 +74,16 @@ public class EnvRestoreCommand implements Callable<Integer> {
     public Integer call() {
         VaultService service = VaultServices.create(context);
         Path home = targetHome != null ? targetHome : service.home();
-        Plan plan = service.prepareRestore(id, archive, checksum, home);
+        BackupRecord record = archive == null ? service.getBackup(id) : null;
+        Path source = archive == null ? Path.of(record.archivePath()) : archive;
+        char[] passphrase = VaultPassphrases.forArchive(context, source);
+        Plan plan;
+        try {
+            plan = service.prepareRestore(id, archive, checksum, home, passphrase);
+        } catch (RuntimeException e) {
+            VaultPassphrases.clear(passphrase);
+            throw e;
+        }
         PrintWriter out = spec.commandLine().getOut();
 
         long create = plan.count(Action.CREATE);
@@ -91,18 +101,29 @@ public class EnvRestoreCommand implements Callable<Integer> {
                 list(out, plan);
             }
             out.flush();
+            VaultPassphrases.clear(passphrase);
             return conflicts + blocked > 0 ? 4 : 0;
         }
 
         boolean overwrite = false;
         if (conflicts > 0 && !skipConflicts) {
             list(out, plan);
-            Confirmation.require(context, confirm,
-                    conflicts + " existing file(s) differ from the backup and will be overwritten. Originals are saved under "
-                            + plan.targetHome().resolve(RestoreEngine.RECOVERY_DIR) + ". Continue?");
+            try {
+                Confirmation.require(context, confirm,
+                        conflicts + " existing file(s) differ from the backup and will be overwritten. Originals are saved under "
+                                + plan.targetHome().resolve(RestoreEngine.RECOVERY_DIR) + ". Continue?");
+            } catch (RuntimeException e) {
+                VaultPassphrases.clear(passphrase);
+                throw e;
+            }
             overwrite = true;
         }
-        Result result = service.restore(plan, overwrite);
+        Result result;
+        try {
+            result = service.restore(plan, overwrite, passphrase);
+        } finally {
+            VaultPassphrases.clear(passphrase);
+        }
 
         if (output.json) {
             Map<String, Object> doc = JsonOutput.document();

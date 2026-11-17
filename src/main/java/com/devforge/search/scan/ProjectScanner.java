@@ -37,7 +37,8 @@ public final class ProjectScanner {
                 String name = dir.getFileName().toString();
                 if (FileClassifier.isExcludedDirectory(name)
                         || SensitiveFiles.isSecretDirectory(name)
-                        || rules.isIgnored(relative(root, dir), true)) {
+                        || (rules.isIgnored(relative(root, dir), true)
+                                && !rules.mayReincludeDescendant(relative(root, dir)))) {
                     return FileVisitResult.SKIP_SUBTREE;
                 }
                 return FileVisitResult.CONTINUE;

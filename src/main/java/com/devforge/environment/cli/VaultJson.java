@@ -38,6 +38,7 @@ public final class VaultJson {
         m.put("fileCount", b.fileCount());
         m.put("appVersion", b.appVersion());
         m.put("includesSensitive", b.includesSensitive());
+        m.put("encrypted", b.encrypted());
         return m;
     }
 }

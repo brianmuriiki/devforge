@@ -25,8 +25,8 @@ import java.util.zip.ZipOutputStream;
 /**
  * Writes a compressed ZIP archive containing {@code files/<relative path>} entries plus a
  * {@code manifest.json} with SHA-256 per file, then a sidecar {@code .sha256} checksum file and a
- * standalone manifest copy. The archive is built under a temporary name and moved into place only
- * when complete, and an existing archive is never overwritten.
+ * standalone manifest copy for legacy archives. Encrypted archives keep the manifest inside the
+ * authenticated envelope, so file names and metadata are not exposed beside the archive.
  */
 public final class BackupEngine {
 
@@ -42,11 +42,20 @@ public final class BackupEngine {
     public static BackupResult create(
             List<SelectedFile> files, String profile, String appVersion, Instant createdAt, Path destinationDir,
             String baseName) {
+        return create(files, profile, appVersion, createdAt, destinationDir, baseName, null);
+    }
+
+    /** Creates a legacy ZIP when {@code passphrase} is null, otherwise an AES-GCM encrypted archive. */
+    public static BackupResult create(
+            List<SelectedFile> files, String profile, String appVersion, Instant createdAt, Path destinationDir,
+            String baseName, char[] passphrase) {
+        boolean encrypted = passphrase != null;
         Path destination = destinationDir.toAbsolutePath().normalize();
-        Path archive = destination.resolve(baseName + ".zip");
-        Path part = destination.resolve(baseName + ".zip.part");
+        String suffix = encrypted ? ".zip.enc" : ".zip";
+        Path archive = destination.resolve(baseName + suffix);
+        Path part = destination.resolve(baseName + suffix + ".part");
         Path manifestFile = destination.resolve(baseName + ".manifest.json");
-        Path checksumFile = destination.resolve(baseName + ".zip.sha256");
+        Path checksumFile = destination.resolve(baseName + suffix + ".sha256");
         try {
             Files.createDirectories(destination);
         } catch (IOException e) {
@@ -58,7 +67,10 @@ public final class BackupEngine {
 
         List<ManifestEntry> entries = new ArrayList<>();
         List<String> skipped = new ArrayList<>();
-        try (OutputStream raw = Files.newOutputStream(part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+        BackupManifest manifest;
+        try (OutputStream raw = encrypted
+                        ? EncryptedArchive.encryptingStream(part, passphrase)
+                        : Files.newOutputStream(part, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
                 ZipOutputStream zip = new ZipOutputStream(raw)) {
             for (SelectedFile f : files) {
                 if (f.absolute().startsWith(destination)) {
@@ -79,7 +91,7 @@ public final class BackupEngine {
             if (entries.isEmpty()) {
                 throw new VaultException("None of the selected files could be read; no backup was created.");
             }
-            BackupManifest manifest = new BackupManifest(BackupManifest.CURRENT_FORMAT, appVersion, profile, createdAt,
+            manifest = new BackupManifest(BackupManifest.CURRENT_FORMAT, appVersion, profile, createdAt,
                     System.getProperty("os.name", "unknown"), List.copyOf(entries));
             ZipEntry me = new ZipEntry(MANIFEST_ENTRY);
             zip.putNextEntry(me);
@@ -98,10 +110,11 @@ public final class BackupEngine {
             String sha = Sha256.file(part);
             moveIntoPlace(part, archive);
             long size = Files.size(archive);
-            BackupManifest manifest = ManifestJson.read(readManifestText(archive));
             Files.writeString(checksumFile, sha + "  " + archive.getFileName() + "\n", StandardCharsets.UTF_8);
-            Files.writeString(manifestFile, ManifestJson.write(manifest), StandardCharsets.UTF_8);
-            return new BackupResult(archive, manifestFile, checksumFile, sha, size, manifest, skipped);
+            if (!encrypted) {
+                Files.writeString(manifestFile, ManifestJson.write(manifest), StandardCharsets.UTF_8);
+            }
+            return new BackupResult(archive, encrypted ? null : manifestFile, checksumFile, sha, size, manifest, skipped);
         } catch (IOException e) {
             deleteQuietly(part);
             deleteQuietly(archive);

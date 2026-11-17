@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.devforge.core.AppContext;
+import com.devforge.core.Prompter;
 import com.devforge.core.paths.AppPaths;
 import com.devforge.core.paths.OperatingSystem;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,6 +39,7 @@ class ModulesCliTest {
 
     private final List<String> prompts = new ArrayList<>();
     private Optional<String> nextAnswer = Optional.empty();
+    private static final String BACKUP_PASSPHRASE = "correct horse battery staple";
     private AppContext context;
     private Path home;
     private Path app;
@@ -53,9 +55,17 @@ class ModulesCliTest {
         AppPaths paths = AppPaths.resolve(
                 OperatingSystem.LINUX, Map.of("DEVFORGE_HOME", tmp.resolve("devforge").toString()), tmp);
         home = Files.createDirectories(tmp.resolve("home"));
-        context = new AppContext(paths, CLOCK, prompt -> {
-            prompts.add(prompt);
-            return nextAnswer;
+        context = new AppContext(paths, CLOCK, new Prompter() {
+            @Override
+            public Optional<String> ask(String prompt) {
+                prompts.add(prompt);
+                return nextAnswer;
+            }
+
+            @Override
+            public Optional<char[]> askSecret(String prompt) {
+                return Optional.of(BACKUP_PASSPHRASE.toCharArray());
+            }
         }, home);
         app = Files.createDirectories(tmp.resolve("work/app"));
         write(app, "src/Auth.java", "class AuthService { void authentication() {} }");
@@ -256,6 +266,7 @@ class ModulesCliTest {
         assertTrue(backup.out().contains("Backup 1 created and verified"));
         assertTrue(backup.out().contains("3 file(s)"));
         assertTrue(run("env", "backups").out().contains("yes"));
+        assertTrue(json(0, "env", "backups", "--json").get("backups").get(0).get("encrypted").asBoolean());
 
         Result verify = run("env", "verify");
         assertEquals(0, verify.code(), verify.err());
@@ -314,7 +325,7 @@ class ModulesCliTest {
         nextAnswer = Optional.of("y");
         Result ok = run("env", "backup", "--include-sensitive");
         assertEquals(0, ok.code(), ok.err());
-        assertTrue(prompts.get(0).contains("NOT encrypted"));
+        assertTrue(prompts.get(0).contains("file(s) that look like secrets"));
         assertTrue(json(0, "env", "backups", "--json").get("backups").get(0).get("includesSensitive").asBoolean());
     }
 

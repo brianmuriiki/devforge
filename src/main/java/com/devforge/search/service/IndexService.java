@@ -172,6 +172,7 @@ public final class IndexService {
      */
     public List<SearchHit> search(String text, Long projectId, String extension, int limit) {
         String fts = FtsQuery.build(text);
+        List<String> terms = substringTerms(text);
         int cap = Math.max(1, Math.min(limit, MAX_LIMIT));
         String ext = extension == null || extension.isBlank()
                 ? null
@@ -188,7 +189,15 @@ public final class IndexService {
                 }
             }
             if (hits.size() < cap) {
-                for (FileIndexRepository.Row r : files.searchNames(c, text.strip(), projectId, ext, cap)) {
+                for (FileIndexRepository.Row r : files.searchContentSubstrings(c, terms, projectId, ext, cap)) {
+                    if (hits.size() < cap && seen.add(r.projectId() + ":" + r.path())) {
+                        hits.add(new SearchHit(r.projectId(), names.getOrDefault(r.projectId(), "?"), r.path(),
+                                "content", r.snippet()));
+                    }
+                }
+            }
+            if (hits.size() < cap) {
+                for (FileIndexRepository.Row r : files.searchNameSubstrings(c, terms, projectId, ext, cap)) {
                     if (hits.size() < cap && seen.add(r.projectId() + ":" + r.path())) {
                         hits.add(new SearchHit(r.projectId(), names.getOrDefault(r.projectId(), "?"), r.path(),
                                 "name", ""));
@@ -197,6 +206,16 @@ public final class IndexService {
             }
             return hits;
         });
+    }
+
+    private static List<String> substringTerms(String text) {
+        List<String> terms = new ArrayList<>();
+        for (String term : text.strip().split("\\s+")) {
+            if (!term.isEmpty()) {
+                terms.add(term);
+            }
+        }
+        return terms;
     }
 
     /**

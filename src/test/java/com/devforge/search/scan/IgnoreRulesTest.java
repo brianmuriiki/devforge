@@ -73,4 +73,11 @@ class IgnoreRulesTest {
     void emptyRulesIgnoreNothing() {
         assertFalse(IgnoreRules.empty().isIgnored("anything", false));
     }
+
+    @Test
+    void directoryRulesApplyToTheirContents() {
+        IgnoreRules rules = IgnoreRules.parse(List.of("build/"));
+        assertTrue(rules.isIgnored("build/output.txt", false));
+        assertTrue(rules.isIgnored("nested/build/output.txt", false));
+    }
 }

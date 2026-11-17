@@ -174,6 +174,11 @@ public final class VaultService {
     }
 
     public BackupOutcome backup(VaultProfile profile, boolean includeSensitive, Selection selection) {
+        return backup(profile, includeSensitive, selection, null);
+    }
+
+    /** Creates a legacy ZIP when {@code passphrase} is null, otherwise an encrypted backup. */
+    public BackupOutcome backup(VaultProfile profile, boolean includeSensitive, Selection selection, char[] passphrase) {
         if (selection.files().isEmpty()) {
             throw new VaultException("Nothing to back up: the profile's paths contain no eligible files"
                     + (selection.missing().isEmpty() ? "" : " (missing: " + String.join(", ", selection.missing()) + ")")
@@ -184,18 +189,22 @@ public final class VaultService {
         Path destDir = profile.destination() != null ? Path.of(profile.destination()) : defaultBackupDir;
         String base = uniqueBaseName(destDir, profile.name() + "-" + STAMP.format(now));
 
-        BackupResult result = BackupEngine.create(selection.files(), profile.name(), appVersion, now, destDir, base);
-        ArchiveVerifier.Report report = ArchiveVerifier.verify(result.archive(), result.sha256());
+        BackupResult result = BackupEngine.create(selection.files(), profile.name(), appVersion, now, destDir, base, passphrase);
+        ArchiveVerifier.Report report = ArchiveVerifier.verify(result.archive(), result.sha256(), passphrase);
         if (!report.ok()) {
             deleteQuietly(result.archive());
-            deleteQuietly(result.manifestFile());
+            if (result.manifestFile() != null) {
+                deleteQuietly(result.manifestFile());
+            }
             deleteQuietly(result.checksumFile());
             throw new VaultException("Backup verification failed; the archive was discarded. " + firstProblems(report));
         }
         boolean sensitive = includeSensitive && !selection.sensitiveIncluded().isEmpty();
         BackupRecord record = tx.inTransaction("Could not register the backup", c -> {
-            long id = repo.insertBackup(c, profile.id(), base, result.archive().toString(), result.manifestFile().toString(),
-                    result.sha256(), now, true, result.sizeBytes(), result.manifest().entries().size(), appVersion, sensitive);
+            long id = repo.insertBackup(c, profile.id(), base, result.archive().toString(),
+                    result.manifestFile() == null ? "" : result.manifestFile().toString(),
+                    result.sha256(), now, true, result.sizeBytes(), result.manifest().entries().size(), appVersion, sensitive,
+                    passphrase != null);
             activity.record(c, null, MODULE, "backup.create", base + " files=" + result.manifest().entries().size(), now);
             return repo.findBackup(c, id).orElseThrow();
         });
@@ -204,7 +213,7 @@ public final class VaultService {
 
     private static String uniqueBaseName(Path dir, String base) {
         String candidate = base;
-        for (int n = 2; Files.exists(dir.resolve(candidate + ".zip")); n++) {
+        for (int n = 2; Files.exists(dir.resolve(candidate + ".zip")) || Files.exists(dir.resolve(candidate + ".zip.enc")); n++) {
             candidate = base + "-" + n;
         }
         return candidate;
@@ -232,7 +241,11 @@ public final class VaultService {
 
     /** Verifies a registered backup and records the outcome. */
     public ArchiveVerifier.Report verify(BackupRecord record) {
-        ArchiveVerifier.Report report = ArchiveVerifier.verify(Path.of(record.archivePath()), record.checksum());
+        return verify(record, null);
+    }
+
+    public ArchiveVerifier.Report verify(BackupRecord record, char[] passphrase) {
+        ArchiveVerifier.Report report = ArchiveVerifier.verify(Path.of(record.archivePath()), record.checksum(), passphrase);
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
         tx.inTransaction("Could not record the verification", c -> {
             repo.markVerified(c, record.id(), report.ok(), now);
@@ -243,7 +256,11 @@ public final class VaultService {
 
     /** Verifies an archive that is not registered (for example, one copied from another computer). */
     public ArchiveVerifier.Report verifyArchive(Path archive, String checksumOrNull) {
-        return ArchiveVerifier.verify(archive, resolveChecksum(archive, checksumOrNull));
+        return verifyArchive(archive, checksumOrNull, null);
+    }
+
+    public ArchiveVerifier.Report verifyArchive(Path archive, String checksumOrNull, char[] passphrase) {
+        return ArchiveVerifier.verify(archive, resolveChecksum(archive, checksumOrNull), passphrase);
     }
 
     // ---- restore ----
@@ -255,6 +272,11 @@ public final class VaultService {
      * @param archive  an archive file not registered here; needs {@code checksum} or a {@code .sha256} file beside it
      */
     public RestoreEngine.Plan prepareRestore(Long backupId, Path archive, String checksum, Path targetHome) {
+        return prepareRestore(backupId, archive, checksum, targetHome, null);
+    }
+
+    public RestoreEngine.Plan prepareRestore(
+            Long backupId, Path archive, String checksum, Path targetHome, char[] passphrase) {
         Path file;
         String expected;
         if (archive != null) {
@@ -265,7 +287,7 @@ public final class VaultService {
             file = Path.of(record.archivePath());
             expected = record.checksum();
         }
-        ArchiveVerifier.Report report = ArchiveVerifier.verify(file, expected);
+        ArchiveVerifier.Report report = ArchiveVerifier.verify(file, expected, passphrase);
         if (!report.ok() || report.manifest().isEmpty()) {
             throw new VaultException("Backup checksum verification failed. Nothing was restored. " + firstProblems(report));
         }
@@ -273,8 +295,12 @@ public final class VaultService {
     }
 
     public RestoreEngine.Result restore(RestoreEngine.Plan plan, boolean overwriteConflicts) {
+        return restore(plan, overwriteConflicts, null);
+    }
+
+    public RestoreEngine.Result restore(RestoreEngine.Plan plan, boolean overwriteConflicts, char[] passphrase) {
         Instant now = clock.instant().truncatedTo(ChronoUnit.SECONDS);
-        RestoreEngine.Result result = RestoreEngine.execute(plan, overwriteConflicts, now);
+        RestoreEngine.Result result = RestoreEngine.execute(plan, overwriteConflicts, now, passphrase);
         tx.inTransaction("Could not log the restore", c -> {
             activity.record(c, null, MODULE, "restore", "restored=" + result.restored() + " failures=" + result.failures().size(), now);
             return null;

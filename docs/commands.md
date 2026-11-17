@@ -40,7 +40,8 @@ devforge search status [-p project]
 devforge search duplicates [-p project]         # report only; never deletes
 devforge search watch [dir] [-p project] [--seconds N]
 ```
-Every word of the query must match (case-insensitive, whole tokens); file paths are matched too.
+Every word of the query must match (case-insensitive). FindX uses indexed whole-word matches first,
+then safely falls back to partial matching so `user` finds `getUserName`; file paths are matched too.
 Exit code 1 when nothing matches. To search for a word that equals a subcommand name, put it after `--`:
 `devforge search -- index`.
 
@@ -67,8 +68,10 @@ devforge env restore [id] [--archive FILE] [--checksum SHA256] [--target-home DI
                      [--dry-run] [--skip-conflicts] [--yes]
 ```
 Paths must be inside your home directory (`~` works). Without `--include`, a profile defaults to common Git, shell and editor
-files. To restore on another computer, copy the `.zip` and its `.zip.sha256` file, then run
-`devforge env restore --archive backup.zip`.
+files. New backups are AES-256-GCM encrypted as `.zip.enc` files. DevForge reads the passphrase from an interactive terminal
+without echoing it, or from `DEVFORGE_BACKUP_PASSPHRASE` for automated environments; it never accepts a passphrase argument.
+To restore on another computer, copy the `.zip.enc` and its `.zip.enc.sha256` file, then run
+`devforge env restore --archive backup.zip.enc`.
 
 ## Combined
 ```
