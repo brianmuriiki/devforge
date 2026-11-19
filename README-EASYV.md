@@ -1,30 +1,30 @@
 Setting up and running DevForge
 1. Install the prerequisites
 
-You need JDK 21 or newer and Apache Maven 3.9+.
+You need JDK 21 or newer. The included Maven Wrapper downloads the required Maven version automatically.
 
 OS	Install
-Windows	winget install EclipseAdoptium.Temurin.21.JDK and winget install Apache.Maven (or download from adoptium.net and maven.apache.org)
-macOS	brew install openjdk@21 maven
-Ubuntu/Debian	sudo apt install openjdk-21-jdk maven
+Windows	winget install EclipseAdoptium.Temurin.21.JDK (or download from adoptium.net)
+macOS	brew install openjdk@21
+Ubuntu/Debian	sudo apt install openjdk-21-jdk
 
 Open a new terminal afterwards and check:
 
 bash
-java -version     # should say 21 or higher
-mvn -version      # should say 3.9 or higher, and "Java version: 21..."
+java -version   # should say 21 or higher
+./mvnw -version # should say Maven 3.9.9 and "Java version: 21..."
 
-If mvn -version shows an older Java, set JAVA_HOME to your JDK 21 folder.
+If ./mvnw -version shows an older Java, set JAVA_HOME to your JDK 21 folder.
 
 2. Unzip and build
 bash
 unzip devforge.zip        # Windows: right-click > Extract All
 cd devforge
-mvn clean verify
+./mvnw clean verify
 
 The first build downloads dependencies, so it needs internet and takes a few minutes. It compiles everything, runs all the tests, and creates the runnable jar at target/devforge-0.1.0-SNAPSHOT.jar.
 
-If the build fails, paste me the output. This code has never been run against the real libraries, so a first-run failure is plausible, and the error text is what I need to fix it. To get the jar while sorting out test failures, use mvn clean package -DskipTests.
+If the build fails, paste the output. To get the jar while sorting out test failures, use ./mvnw clean package -DskipTests.
 
 3. Run it
 bash
@@ -82,4 +82,4 @@ Add --help to any command to see its options, and --json for machine-readable ou
 Where your data goes: the database is at ~/.local/share/devforge/ on Linux, ~/Library/Application Support/DevForge/ on macOS, and %LOCALAPPDATA%\DevForge\ on Windows. Backups are stored in a backups folder there.
 Exit codes: 0 is success and 1 is a failure. 3 means vulnerabilities were found, and 4 means the result is incomplete (for example, the scan couldn’t reach the advisory service). A code of 4 is never a clean result.
 Using an IDE: open the devforge folder in IntelliJ IDEA, VS Code (with the Java extension pack), or Eclipse as a Maven project. The entry point is com.devforge.Main.
-A real installer (optional): scripts/package.sh deb|dmg on Linux/macOS, or powershell -File scripts\package.ps1 -Type exe on Windows. These build an installer that bundles its own Java. Run them on the target OS (the Windows installer also needs the WiX Toolset). They are untested.
+A real installer (optional): scripts/package.sh deb|dmg on Linux/macOS, or powershell -File scripts\package.ps1 -Type exe on Windows. These build an installer that bundles its own Java. Run them on the target OS (the Windows installer also needs the WiX Toolset). CI is configured to smoke-test native app images on all three platforms.

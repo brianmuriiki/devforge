@@ -1,8 +1,8 @@
 # Development
 
 ```bash
-mvn clean verify      # compile, run all tests, build the shaded jar
-mvn test              # tests only
+./mvnw clean verify   # compile, run all tests, build the shaded jar
+./mvnw test           # tests only
 ```
 
 ## Tests
@@ -19,5 +19,6 @@ mvn test              # tests only
 4. Add `--json` output with `schemaVersion`, tests at service and CLI level, and ArchUnit rules for new packages.
 
 ## Packaging and CI
-`scripts/package.sh` / `scripts/package.ps1` (jpackage), `.github/workflows/ci.yml` (build + smoke test on 3 OSes),
-`.github/workflows/release.yml` (packages on `v*` tags).
+`scripts/package.sh` / `scripts/package.ps1` (jpackage), `.github/workflows/ci.yml` (build, tests, and native-image smoke
+tests on 3 OSes), `.github/workflows/release.yml` (signed packages on `v*` tags). See `releasing.md` for credentials and
+verification. Tagged releases deliberately fail rather than publish an unsigned installer.

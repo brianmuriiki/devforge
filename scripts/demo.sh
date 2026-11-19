@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Throwaway end-to-end demo of every module. Usage: scripts/demo.sh  (after `mvn clean verify`)
+# Throwaway end-to-end demo of every module. Usage: scripts/demo.sh  (after `./mvnw clean verify`)
 set -euo pipefail
 JAR="$(ls "$(cd "$(dirname "$0")/.." && pwd)"/target/devforge-*.jar | grep -v original | head -n1)"
 WORK="$(mktemp -d)"

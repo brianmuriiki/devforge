@@ -2,6 +2,7 @@ package com.devforge.security.parse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.devforge.security.model.Dependency;
 import java.io.IOException;
@@ -27,7 +28,6 @@ class PythonParserTest {
                 requests[security]>=2.28,<3
                 Flask_SQLAlchemy == 3.0.5 ; python_version >= "3.8"
                 numpy==1.26.0 --hash=sha256:abc
-                -r other.txt
                 git+https://github.com/x/y.git#egg=y
                 ./local/path
                 wildcard==1.*
@@ -43,6 +43,42 @@ class PythonParserTest {
         assertEquals("1.26.0", byName(deps, "numpy").resolvedVersion());
         assertNull(byName(deps, "wildcard").resolvedVersion());
         assertNull(byName(deps, "bare-name").resolvedVersion());
+    }
+
+    @Test
+    void followsNestedRequirementIncludesWithoutScanningFilesTwice() throws IOException {
+        Files.createDirectories(tmp.resolve("requirements"));
+        Files.writeString(tmp.resolve("requirements.txt"), """
+                Django==4.2.1
+                -r requirements/base.txt
+                --requirement=requirements/dev.txt
+                """);
+        Files.writeString(tmp.resolve("requirements/base.txt"), """
+                requests==2.31.0
+                -r common.txt
+                """);
+        Files.writeString(tmp.resolve("requirements/common.txt"), "click==8.1.7\n");
+        Files.writeString(tmp.resolve("requirements/dev.txt"), "-r common.txt\npytest==8.0.0\n");
+
+        List<Dependency> deps = PythonParser.parse(tmp.resolve("requirements.txt"));
+
+        assertEquals(4, deps.size());
+        assertEquals("4.2.1", byName(deps, "django").resolvedVersion());
+        assertEquals("2.31.0", byName(deps, "requests").resolvedVersion());
+        assertEquals("8.1.7", byName(deps, "click").resolvedVersion());
+        assertEquals("8.0.0", byName(deps, "pytest").resolvedVersion());
+    }
+
+    @Test
+    void rejectsCircularOrEscapingRequirementIncludes() throws IOException {
+        Files.writeString(tmp.resolve("requirements.txt"), "-r child.txt\n");
+        Files.writeString(tmp.resolve("child.txt"), "-r requirements.txt\n");
+
+        assertThrows(ManifestException.class, () -> PythonParser.parse(tmp.resolve("requirements.txt")));
+
+        Files.writeString(tmp.resolve("requirements.txt"), "-r ../outside.txt\n");
+
+        assertThrows(ManifestException.class, () -> PythonParser.parse(tmp.resolve("requirements.txt")));
     }
 
     @Test
