@@ -14,18 +14,20 @@ Java 21 · Maven · Picocli · SQLite · modular monolith. Everything runs local
 
 ## Important: verification status
 
-This project was written and reviewed with limited tooling. Its dependency-free logic was executed and tested, but the
-database-backed services, the CLI end-to-end tests and everything on Windows/macOS have **not** been run by the author.
-Run `mvn clean verify` on your machine first and fix anything it reports. See `docs/known-limitations.md`.
+The full Maven test suite, including database-backed services and CLI tests, is run locally against its real dependencies.
+The CI workflow is configured to repeat it on Linux, macOS, and Windows, then smoke-test the packaged native app image.
+Before relying on a source checkout, run `./mvnw clean verify`; see `docs/known-limitations.md` for the remaining product
+boundaries.
 
 ## Requirements
 
-- JDK 21+ and Apache Maven 3.9+ to build. Packaged releases (jpackage) bundle their own runtime.
+- JDK 21+ to build. The checked-in Maven Wrapper downloads Maven 3.9.9 automatically. Packaged releases (jpackage)
+  bundle their own runtime.
 
 ## Build and run
 
 ```bash
-mvn clean verify
+./mvnw clean verify
 java -jar target/devforge-0.1.0-SNAPSHOT.jar --help
 scripts/demo.sh        # end-to-end demo with throwaway data (Linux/macOS)
 ```
@@ -95,13 +97,14 @@ log directory (`devforge.log`); `DEVFORGE_LOG_LEVEL` or `logLevel` in `config.js
 ## Documentation
 
 `docs/commands.md`, `docs/architecture.md`, `docs/database.md`, `docs/security.md`, `docs/development.md`,
-`docs/known-limitations.md`, `CHANGELOG.md`.
+`docs/known-limitations.md`, `docs/releasing.md`, `CHANGELOG.md`.
 
 ## Packaging
 
 `scripts/package.sh [app-image|deb|rpm|dmg|pkg]` (Linux/macOS) and `scripts\package.ps1 -Type exe` (Windows) build native
-packages with jpackage. Run them on the target OS. GitHub Actions workflows (`.github/workflows`) build and test on all three
-systems and publish packages for tags like `v0.1.0`.
+packages with jpackage. Run them on the target OS. GitHub Actions workflows (`.github/workflows`) build, test, and smoke-test
+native app images on all three systems. Tagged releases require configured macOS signing/notarization and Windows Authenticode
+secrets; release artifacts include an OS-specific SHA-256 manifest.
 
 ## License
 

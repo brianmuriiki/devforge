@@ -7,9 +7,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,11 +29,26 @@ public final class PythonParser {
     private static final Pattern POETRY_KEY = Pattern.compile("^([A-Za-z0-9][A-Za-z0-9._-]*)\\s*=\\s*(.+)$");
     private static final Pattern POETRY_TABLE =
             Pattern.compile("^tool\\.poetry\\.(?:dependencies|dev-dependencies|group\\.[^.]+\\.dependencies)$");
+    private static final Pattern REQUIREMENT_INCLUDE =
+            Pattern.compile("^(?:-r|--requirement)(?:\\s+|=)(.+)$", Pattern.CASE_INSENSITIVE);
     private static final long MAX_BYTES = 5L * 1024 * 1024;
+    private static final int MAX_REQUIREMENT_INCLUDE_DEPTH = 16;
 
     private PythonParser() {}
 
     public static List<Dependency> parse(Path file) throws ManifestException {
+        if (file.getFileName().toString().equals("pyproject.toml")) {
+            return parsePyproject(readLines(file));
+        }
+        Path normalized = file.toAbsolutePath().normalize();
+        Path root = normalized.getParent();
+        if (root == null) {
+            throw new ManifestException("Could not determine the directory for " + file.getFileName() + ".");
+        }
+        return parseRequirementsFile(normalized, root, new HashSet<>(), new HashSet<>(), 0);
+    }
+
+    private static List<String> readLines(Path file) throws ManifestException {
         List<String> lines;
         try {
             if (Files.size(file) > MAX_BYTES) {
@@ -41,7 +58,64 @@ public final class PythonParser {
         } catch (IOException e) {
             throw new ManifestException("Could not read " + file.getFileName() + ": " + e.getMessage(), e);
         }
-        return file.getFileName().toString().equals("pyproject.toml") ? parsePyproject(lines) : parseRequirements(lines);
+        return lines;
+    }
+
+    private static List<Dependency> parseRequirementsFile(
+            Path file, Path root, Set<Path> active, Set<Path> parsed, int depth) throws ManifestException {
+        if (depth > MAX_REQUIREMENT_INCLUDE_DEPTH) {
+            throw new ManifestException("Requirements include nesting exceeds " + MAX_REQUIREMENT_INCLUDE_DEPTH + " files.");
+        }
+        if (!file.startsWith(root)) {
+            throw new ManifestException("Requirements include escapes the project directory: " + file + ".");
+        }
+        if (Files.isSymbolicLink(file) || !Files.isRegularFile(file)) {
+            throw new ManifestException("Requirements include is not a regular file: " + file + ".");
+        }
+        if (parsed.contains(file)) {
+            return List.of();
+        }
+        if (!active.add(file)) {
+            throw new ManifestException("Circular requirements include: " + file + ".");
+        }
+        try {
+            List<Dependency> result = new ArrayList<>();
+            for (String line : readLines(file)) {
+                String included = requirementInclude(line);
+                if (included == null) {
+                    parseRequirement(line, "requirements").ifPresent(result::add);
+                    continue;
+                }
+                Path target;
+                try {
+                    target = file.getParent().resolve(included).normalize();
+                } catch (RuntimeException e) {
+                    throw new ManifestException("Invalid requirements include in " + file.getFileName() + ": " + included, e);
+                }
+                result.addAll(parseRequirementsFile(target, root, active, parsed, depth + 1));
+            }
+            parsed.add(file);
+            return result;
+        } finally {
+            active.remove(file);
+        }
+    }
+
+    private static String requirementInclude(String raw) {
+        String line = raw.strip();
+        int comment = line.indexOf(" #");
+        if (comment >= 0) {
+            line = line.substring(0, comment).strip();
+        }
+        Matcher include = REQUIREMENT_INCLUDE.matcher(line);
+        if (!include.matches()) {
+            return null;
+        }
+        String value = include.group(1).strip();
+        if ((value.startsWith("\"") && value.endsWith("\"")) || (value.startsWith("'") && value.endsWith("'"))) {
+            value = value.substring(1, value.length() - 1);
+        }
+        return value;
     }
 
     public static List<Dependency> parseRequirements(List<String> lines) {

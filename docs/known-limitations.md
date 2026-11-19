@@ -3,12 +3,12 @@
 Honest list of what DevForge does not do (yet), and caveats about how it was verified.
 
 ## Verification status
-- The code was type-checked and its dependency-free logic (parsers, normalization, scanning, backup/restore engine,
-  version/license logic, configuration) was executed by the author against stand-ins for Picocli/Jackson/JUnit.
-- **Not executed by the author:** anything needing the real Picocli, SQLite JDBC driver, Logback, ArchUnit or JUnit
-  (database-backed services and CLI end-to-end tests), and everything on Windows and macOS.
-  Run `mvn clean verify` on each OS before relying on it.
-- jpackage scripts and release workflow are untested. macOS signing/notarization and Windows code signing are not included.
+- The full Maven suite runs against the real Picocli, SQLite JDBC, Logback, ArchUnit, and JUnit dependencies. It covers
+  database-backed services, CLI paths, parsers, scanners, and encrypted backup/restore.
+- CI is configured to repeat the suite and smoke-test the shaded JAR and native app image on Linux, macOS, and Windows.
+  The release workflow refuses to publish unsigned macOS or Windows installers.
+- Hosted CI and a real signed/notarized release still require the repository's signing credentials and a tag push; they
+  cannot be exercised from a local checkout without those external credentials.
 
 ## FindX
 - FindX searches whole tokens first, then safely falls back to substring matching for identifiers and paths. The fallback is
@@ -23,8 +23,8 @@ Honest list of what DevForge does not do (yet), and caveats about how it was ver
 - npm `package-lock.json` dependencies are scanned transitively. Maven and Python transitive dependencies still require
   their respective lockfiles or resolvers and are not inferred.
 - Maven versions inherited from a parent POM or BOM stay "unresolved" (the tool never runs Maven).
-- npm supports `package-lock.json`; yarn and pnpm lockfiles are not yet parsed. Python accepts exact `==` pins; Poetry,
-  uv, and pip lockfiles are not yet parsed, and `-r` includes are not yet followed.
+- npm supports `package-lock.json`; yarn and pnpm lockfiles are not yet parsed. Python follows bounded, project-contained
+  `-r` requirement includes and accepts exact `==` pins; Poetry, uv, and pip lockfiles are not yet parsed.
 - Severity uses the advisory's `database_specific.severity`, with CVSS v3 base-vector scoring as a fallback. Advisories
   without either remain UNKNOWN.
 - Version comparison for "outdated" is a tolerant heuristic, never used for vulnerability matching.
