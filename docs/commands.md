@@ -3,6 +3,10 @@
 All commands accept `--help`. Options like `--json` and `--verbose` go **after** the subcommand.
 Enum values (`--priority high`, `--status done`) are case-insensitive. `--project` accepts an id or a name.
 
+Starting DevForge with no arguments opens an interactive `devforge>` prompt. Enter commands without the executable name;
+`help` shows the command list, and `exit` or Ctrl+D leaves the prompt. Passing a command as command-line arguments still
+runs it once and exits.
+
 ## Core
 ```
 devforge --help | --version

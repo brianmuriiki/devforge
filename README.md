@@ -28,9 +28,14 @@ boundaries.
 
 ```bash
 ./mvnw clean verify
-java -jar target/devforge-0.1.0-SNAPSHOT.jar --help
+java -jar target/devforge-0.1.0-SNAPSHOT.jar  # starts the interactive prompt
+# At the devforge> prompt, enter commands such as: help, status, task list
+# Type exit (or press Ctrl+D) to quit
 scripts/demo.sh        # end-to-end demo with throwaway data (Linux/macOS)
 ```
+
+You can still run a single command and exit by passing it directly, for example:
+`java -jar target/devforge-0.1.0-SNAPSHOT.jar status`.
 
 ## Quick tour
 
